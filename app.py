@@ -1,0 +1,134 @@
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+import os
+
+from src.pipeline.prediction_pipeline import PredictionPipeline
+from src.pipeline.train_pipeline import TrainPipeline
+from src.constant.application import APP_HOST, APP_PORT
+
+import warnings
+warnings.filterwarnings("ignore")
+
+# Load environment variables
+load_dotenv()
+
+# Log environment variables
+print("MONGODB_URL", os.getenv("MONGODB_URL"))
+print("MONGODB_URL_KEY", os.getenv("MONGODB_URL_KEY"))
+
+
+app = FastAPI()
+
+# Set up template directory
+templates = Jinja2Templates(directory="templates")
+
+# Enable CORS for all origins
+origins = ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Pydantic Model for JSON input
+class CustomerData(BaseModel):
+    Age: int
+    Education: int
+    Merital_Status: int
+    Parental_Status: int
+    Children: int
+    Income: float
+    Total_Spending: float
+    Days_as_Customer: int
+    Recency: int
+    Wines: int
+    Fruits: int
+    Meat: int
+    Fish: int
+    Sweets: int
+    Gold: int
+    Catalog: int
+    Store: int
+    Discount_Purchases: int
+    Total_Promo: int
+    NumWebVisitsMonth: int
+
+
+# Favicon handler - returns 204 No Content to suppress 404 errors
+@app.get("/favicon.ico")
+async def favicon():
+    return JSONResponse(content={}, status_code=204)
+
+
+# Train Model API
+@app.get("/train")
+async def trainRouteClient():
+    try:
+        train_pipeline = TrainPipeline()
+        train_pipeline.run_pipeline()
+        return JSONResponse(content={"status": True, "message": "Training successful!"})
+    except Exception as e:
+        return JSONResponse(content={"status": False, "error": str(e)}, status_code=500)
+
+
+# Test Environment variables API
+@app.get("/test_env")
+async def testEnvRouteClient():
+    mongo_url = os.getenv("MONGODB_URL")
+    return {"MONGODB_URL": mongo_url}
+
+
+# Render Customer Form (UI)
+@app.get("/")
+async def predictGetRouteClient(request: Request):
+    try:
+        return templates.TemplateResponse(
+            "customer.html", {"request": request, "context": "Rendering"}
+        )
+    except Exception as e:
+        return JSONResponse(content={"status": False, "error": str(e)}, status_code=500)
+
+
+# Predict API (JSON Input)
+@app.post("/")
+async def predictRouteClient(data: CustomerData):
+    try:
+        print("Received data", data.dict())  # Debugging step
+        # Convert JSON to list format expected by model
+        input_data = [
+            data.Age, data.Education, data.Merital_Status, data.Parental_Status, data.Children,
+            data.Income, data.Total_Spending, data.Days_as_Customer, data.Recency, data.Wines,
+            data.Fruits, data.Meat, data.Fish, data.Sweets, data.Gold, data.Catalog,
+            data.Store, data.Discount_Purchases, data.Total_Promo, data.NumWebVisitsMonth
+        ]
+        
+        # Run Prediction
+        prediction_pipeline = PredictionPipeline()
+        predicted_cluster = prediction_pipeline.run_pipeline(input_data=input_data)
+        
+        resp = {"predicted_cluster": int(predicted_cluster[0])}
+        return JSONResponse(content=resp)
+
+    except Exception as e:
+        return JSONResponse(content={"status": False, "error": str(e)}, status_code=500)
+
+
+# Run FastAPI Application
+if __name__ == "__main__":
+    import uvicorn
+    
+    print("MONGODB_URL", os.getenv("MONGODB_URL"))
+    print("MONGODB_URL_KEY:", os.getenv("MONGODB_URL_KEY"))
+    
+    uvicorn.run(app, host="127.0.0.1", port=APP_PORT)
