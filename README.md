@@ -19,8 +19,7 @@ Dataset used
 ## Tech Stack Used
 
 1. Python
-2. FastAPI
-3. Machine learning algorithms
+2. Machine learning algorithms
 
 ## Infrastructure required
 1. Github Actions
